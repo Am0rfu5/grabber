@@ -2,7 +2,6 @@
 
 
 
-extern crate csv;
 
 use std::vec::Vec;
 use std::env;
