@@ -1,8 +1,4 @@
 #![allow(non_snake_case)]
-
-
-
-
 use std::vec::Vec;
 use std::env;
 use std::fs::{self, File};
@@ -14,47 +10,48 @@ use select::predicate::{Predicate, Attr, Name};
 use reqwest::header::USER_AGENT;
 use std::time::Duration;
 use rayon::prelude::*;
-use clap::{Arg, App};
+use clap::{Arg, Command, ArgAction};
 
 fn main() {
-    let matches = App::new("Grabber")
+    let matches = Command::new("Grabber")
         .version("1.0")
         .author("Am0rfu5 https://github.com/Am0rfu5/")
-        .about("A tool for OSINT of company emails used for penetration testing")
+        .about("A tool for scraping company emails from Linkedin used for penetration testing")
         .arg(Arg::new("CompanyName")
-            .about("Specifies the name of the company to scan for.")
+            .short('c')
+            .help("Specifies the name of the company to scan for.")
             .required(true)
             .index(1))
-        .arg(Arg::with_name("proxy")
+        .arg(Arg::new("proxy")
             .short('p')
             .long("proxy")
             .value_name("Proxy")
-            .about("Use this flag to scan via proxies. If set to true the scan WILL take much longer.")
-            .takes_value(false))
-        .arg(Arg::with_name("wordlist")
+            .help("Use this flag to scan via proxies. If set to true the scan WILL take much longer.")
+            .action(ArgAction::SetTrue))
+        .arg(Arg::new("wordlist")
             .short('w')
             .long("wordlist")
             .value_name("WordList")
-            .about("Path to a wordlist file which can be used for the scan.")
-            .takes_value(true))
-        .arg(Arg::with_name("output")
+            .help("Path to a wordlist file which can be used for the scan.")
+            .default_value("wordlists/default.csv")
+            .action(ArgAction::SetTrue))
+        .arg(Arg::new("output")
             .short('o')
             .long("output")
             .value_name("Output")
-            .about("Name of the file to output to (CSV FORMAT).")
-            .takes_value(true))
+            .help("Name of the file to output to (CSV FORMAT).")
+            .default_value("output.csv")
+            .action(ArgAction::SetTrue))
         .get_matches();
-
-    let res = splitVector(matches.is_present("proxy"), matches.value_of("CompanyName").unwrap(), getWordList(matches.value_of("wordlist").unwrap_or("wordlists/default.csv")));
     
-    let mut outputFile = "output.csv";
-    if matches.is_present("output") {
-        outputFile = match matches.value_of("output") {
-            Some(val) => val,
-            None => outputFile
-        };
-    }
-    outputToFile(res, outputFile);
+    let company_name = matches.get_one::<String>("CompanyName").expect("required");
+    let proxy = matches.get_flag("proxy");
+    let wordlist = matches.get_one::<String>("wordlist").unwrap(); // Unwrap is safe due to default value
+    let output = matches.get_one::<String>("output").unwrap(); // Unwrap is safe due to default value
+
+    let res = splitVector(proxy, company_name, getWordList(wordlist));
+    
+    outputToFile(res, output);
 
 }
 
@@ -205,12 +202,12 @@ fn splitVector(useProxy: bool, company_name: &str, professionList: Vec<String>) 
     let data: Vec<Vec<Vec<String>>>;
     if useProxy {
         data = professionList.par_iter()
-            .map(|i| scrape(&i, &company_name.clone(), Some(proxy_list.clone())))
+            .map(|i| scrape(&i, &company_name, Some(proxy_list.clone())))
             .collect();
     }
     else {
         data = professionList.par_iter() 
-            .map(|i| scrape(&i, &company_name.clone(), None))
+            .map(|i| scrape(&i, &company_name, None))
             .collect();
     }
     let mut cleanArr = Vec::new();
@@ -228,7 +225,7 @@ fn findProxy(proxy_list: &mut Vec<String>) -> String {
     let mut rng = thread_rng();
     while proxy_list.len() > 0 {
         // Select a proxy from the list at random and pop it
-        let randVal = rng.gen_range(0, proxy_list.len()-1);
+        let randVal = rng.gen_range(0..proxy_list.len()-1);
         let proxy = proxy_list[randVal].clone();
         proxy_list.remove(randVal);
         const URL: &str = "http://www.bing.com/search?q=Test+Search&qs=n&form=QBRE&sp=-1&ghc=1&pq=test+searc&sc=5-10&sk=&cvid=B580BE8B2CDB4AB7817D09B5011F1A6C";
